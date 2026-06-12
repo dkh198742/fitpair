@@ -1,0 +1,187 @@
+@import url('https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── Theme tokens ── */
+:root {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f5f5f3;
+  --bg-tertiary: #f0ede8;
+  --text-primary: #1a1a1a;
+  --text-secondary: #666666;
+  --border: rgba(0,0,0,0.1);
+  --shadow: rgba(0,0,0,0.08);
+  --green: #1D9E75;
+  --green-dark: #0F6E56;
+  --green-light: #E1F5EE;
+  --green-text: #085041;
+  --blue: #185FA5;
+  --blue-light: #E6F1FB;
+  --nav-active-bg: #ffffff;
+  --chip-active-bg: #E1F5EE;
+  --ai-bubble-bg: #E1F5EE;
+  --ai-bubble-text: #085041;
+}
+
+[data-theme="dark"] {
+  --bg-primary: #1e1e1c;
+  --bg-secondary: #2a2a28;
+  --bg-tertiary: #141412;
+  --text-primary: #f0ede8;
+  --text-secondary: #999999;
+  --border: rgba(255,255,255,0.1);
+  --shadow: rgba(0,0,0,0.3);
+  --nav-active-bg: #3a3a38;
+  --chip-active-bg: #0F3D2E;
+  --ai-bubble-bg: #0F3D2E;
+  --ai-bubble-text: #9FE1CB;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  min-height: 100vh;
+  transition: background .2s, color .2s;
+}
+
+.app { max-width: 900px; margin: 0 auto; padding: 16px; padding-bottom: 32px; }
+
+.header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 0 20px;
+}
+
+.logo { font-size: 20px; font-weight: 600; color: var(--text-primary); }
+.logo span { color: var(--green); }
+
+.nav {
+  display: flex; gap: 2px; margin-bottom: 20px;
+  background: var(--bg-tertiary); border-radius: 12px; padding: 3px;
+}
+
+.nav-btn {
+  flex: 1; padding: 8px; border: none; background: transparent;
+  cursor: pointer; border-radius: 9px; font-size: 13px; font-weight: 500;
+  color: var(--text-secondary); transition: all .15s;
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+}
+.nav-btn.active {
+  background: var(--nav-active-bg); color: var(--text-primary);
+  box-shadow: 0 1px 3px var(--shadow);
+}
+
+.card {
+  background: var(--bg-primary); border-radius: 14px;
+  border: 0.5px solid var(--border); padding: 16px; margin-bottom: 14px;
+  transition: background .2s, border-color .2s;
+}
+
+.card-title {
+  font-size: 11px; font-weight: 500; color: var(--text-secondary); margin-bottom: 12px;
+  text-transform: uppercase; letter-spacing: .6px;
+}
+
+.macro-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; }
+
+.macro-cell {
+  background: var(--bg-secondary); border-radius: 10px; padding: 12px; text-align: center;
+  transition: background .2s;
+}
+
+.macro-val { font-size: 22px; font-weight: 500; line-height: 1; }
+.macro-lbl { font-size: 11px; color: var(--text-secondary); margin-top: 3px; }
+.macro-cal { color: #1D9E75; } .macro-pro { color: #3B6D11; }
+.macro-carb { color: #BA7517; } .macro-fat { color: #185FA5; }
+
+.bar-wrap { background: var(--border); border-radius: 4px; height: 6px; margin-top: 6px; overflow: hidden; }
+.bar { height: 100%; border-radius: 4px; transition: width .4s; }
+
+.form-row {
+  display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr auto;
+  gap: 8px; align-items: end; margin-bottom: 10px;
+}
+.form-row2 {
+  display: grid; grid-template-columns: 2fr 1fr 1fr auto;
+  gap: 8px; align-items: end; margin-bottom: 10px;
+}
+
+label { font-size: 12px; color: var(--text-secondary); display: block; margin-bottom: 3px; font-weight: 500; }
+
+input, select {
+  width: 100%; padding: 7px 10px;
+  border: 0.5px solid var(--border); border-radius: 8px;
+  font-size: 13px; background: var(--bg-primary); color: var(--text-primary); outline: none;
+  transition: border-color .15s, background .2s;
+}
+input:focus, select:focus { border-color: var(--green); }
+
+.btn {
+  padding: 8px 16px; border-radius: 8px; border: 0.5px solid var(--border);
+  background: var(--bg-primary); cursor: pointer; font-size: 13px; font-weight: 500;
+  color: var(--text-primary); transition: all .15s;
+}
+.btn:hover { background: var(--bg-secondary); }
+.btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.btn-primary { background: var(--green); color: white; border-color: var(--green); }
+.btn-primary:hover { background: var(--green-dark); border-color: var(--green-dark); }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+.btn-danger { color: #A32D2D; border-color: rgba(163,45,45,.3); }
+.btn-danger:hover { background: #FCEBEB; }
+
+.log-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 0; border-bottom: 0.5px solid var(--border);
+}
+.log-item:last-child { border-bottom: none; }
+.log-name { flex: 1; font-size: 14px; }
+.log-macros { display: flex; gap: 12px; }
+.log-macro { font-size: 12px; color: var(--text-secondary); }
+.log-macro b { font-weight: 500; color: var(--text-primary); }
+
+.section-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+
+.workout-type { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+.type-chip {
+  padding: 5px 12px; border-radius: 16px; border: 0.5px solid var(--border);
+  background: transparent; cursor: pointer; font-size: 12px; font-weight: 500;
+  color: var(--text-secondary); transition: all .15s;
+}
+.type-chip.active { background: var(--chip-active-bg); border-color: var(--green); color: var(--green-dark); }
+
+.ai-bubble {
+  background: var(--ai-bubble-bg); border-radius: 12px; border-bottom-left-radius: 2px;
+  padding: 12px 14px; font-size: 14px; line-height: 1.6; color: var(--ai-bubble-text);
+  margin-bottom: 4px; white-space: pre-wrap;
+}
+
+.ai-input-row { display: flex; gap: 8px; margin-top: 10px; }
+.ai-input-row input { flex: 1; }
+
+.loading-dots::after {
+  content: '.'; animation: dots 1s steps(3,end) infinite;
+}
+@keyframes dots { 0%{content:'.'} 33%{content:'..'} 66%{content:'...'} }
+
+.shared-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+.avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 500; flex-shrink: 0;
+}
+.av-a { background: #E1F5EE; color: #0F6E56; }
+.av-b { background: #E6F1FB; color: #185FA5; }
+
+.empty {
+  text-align: center; padding: 32px;
+  color: var(--text-secondary); font-size: 14px;
+}
+
+@media (max-width: 600px) {
+  .form-row, .form-row2 { grid-template-columns: 1fr 1fr; }
+  .macro-grid { grid-template-columns: repeat(2,1fr); }
+  .shared-row { grid-template-columns: 1fr; }
+  .nav-btn { font-size: 11px; gap: 3px; }
+  .nav-btn i { font-size: 14px; }
+}
