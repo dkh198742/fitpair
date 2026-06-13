@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
 
@@ -9,6 +9,13 @@ export default function MacrosTab() {
   const [showGoals, setShowGoals] = useState(false);
   const [goals, setGoals] = useState(profile?.macro_goals || { calories: 1800, protein: 140, carbs: 180, fat: 60 });
   const [loading, setLoading] = useState(true);
+
+  // Food search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const searchTimeout = useRef(null);
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -29,6 +36,58 @@ export default function MacrosTab() {
       .order('created_at', { ascending: true });
     setLog(data || []);
     setLoading(false);
+  }
+
+  async function searchFood(query) {
+    if (!query || query.length < 2) { setSearchResults([]); return; }
+    setSearching(true);
+    try {
+      const res = await fetch(
+        `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=8&fields=product_name,brands,nutriments,serving_size,serving_quantity`
+      );
+      const data = await res.json();
+      const results = (data.products || [])
+        .filter(p => p.product_name && p.nutriments)
+        .map(p => {
+          const n = p.nutriments;
+          // Prefer per-serving values, fall back to per-100g
+          const serving = p.serving_quantity || 100;
+          const factor = serving / 100;
+          return {
+            name: p.product_name + (p.brands ? ` (${p.brands.split(',')[0].trim()})` : ''),
+            serving: p.serving_size || `${serving}g`,
+            calories: Math.round((n['energy-kcal_serving'] || n['energy-kcal_100g'] * factor) || 0),
+            protein: Math.round((n['proteins_serving'] || n['proteins_100g'] * factor) || 0),
+            carbs: Math.round((n['carbohydrates_serving'] || n['carbohydrates_100g'] * factor) || 0),
+            fat: Math.round((n['fat_serving'] || n['fat_100g'] * factor) || 0),
+          };
+        })
+        .filter(p => p.calories > 0);
+      setSearchResults(results);
+    } catch {
+      setSearchResults([]);
+    }
+    setSearching(false);
+  }
+
+  function handleSearchInput(e) {
+    const q = e.target.value;
+    setSearchQuery(q);
+    clearTimeout(searchTimeout.current);
+    searchTimeout.current = setTimeout(() => searchFood(q), 500);
+  }
+
+  function selectFood(food) {
+    setForm({
+      name: food.name,
+      calories: food.calories,
+      protein: food.protein,
+      carbs: food.carbs,
+      fat: food.fat,
+    });
+    setShowSearch(false);
+    setSearchQuery('');
+    setSearchResults([]);
   }
 
   async function addEntry() {
@@ -69,6 +128,7 @@ export default function MacrosTab() {
 
   return (
     <div>
+      {/* Macro summary */}
       <div className="card">
         <div className="section-hdr">
           <span className="card-title" style={{ margin: 0 }}>Today's macros</span>
@@ -78,7 +138,7 @@ export default function MacrosTab() {
         </div>
 
         {showGoals && (
-          <div style={{ background: 'var(--color-background-secondary,#f5f5f3)', borderRadius: '10px', padding: '12px', marginBottom: '12px' }}>
+          <div style={{ background: 'var(--bg-secondary)', borderRadius: '10px', padding: '12px', marginBottom: '12px' }}>
             <div className="form-row">
               {['calories', 'protein', 'carbs', 'fat'].map(k => (
                 <div key={k}>
@@ -110,8 +170,69 @@ export default function MacrosTab() {
         </div>
       </div>
 
+      {/* Food search */}
       <div className="card">
-        <div className="card-title">Log food</div>
+        <div className="section-hdr">
+          <span className="card-title" style={{ margin: 0 }}>Log food</span>
+          <button className="btn btn-sm" onClick={() => { setShowSearch(!showSearch); setSearchQuery(''); setSearchResults([]); }}>
+            <i className="ti ti-search" style={{ fontSize: '13px', marginRight: '4px' }} />
+            {showSearch ? 'Manual entry' : 'Search food'}
+          </button>
+        </div>
+
+        {showSearch && (
+          <div style={{ marginBottom: '14px' }}>
+            <div style={{ position: 'relative' }}>
+              <input
+                placeholder="Search millions of foods… e.g. 'Greek yogurt', 'Big Mac'"
+                value={searchQuery}
+                onChange={handleSearchInput}
+                autoFocus
+                style={{ paddingRight: '36px' }}
+              />
+              {searching && (
+                <div style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  <i className="ti ti-loader-2" style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }} />
+                </div>
+              )}
+            </div>
+
+            {searchResults.length > 0 && (
+              <div style={{ marginTop: '8px', border: '0.5px solid var(--border)', borderRadius: '10px', overflow: 'hidden' }}>
+                {searchResults.map((food, i) => (
+                  <div
+                    key={i}
+                    onClick={() => selectFood(food)}
+                    style={{
+                      padding: '10px 12px', cursor: 'pointer',
+                      borderBottom: i < searchResults.length - 1 ? '0.5px solid var(--border)' : 'none',
+                      background: 'var(--bg-primary)',
+                      transition: 'background .1s',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-secondary)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-primary)'}
+                  >
+                    <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '3px' }}>{food.name}</div>
+                    <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                      <span>per {food.serving}</span>
+                      <span style={{ color: '#1D9E75' }}><b>{food.calories}</b> cal</span>
+                      <span><b>{food.protein}</b>g protein</span>
+                      <span><b>{food.carbs}</b>g carbs</span>
+                      <span><b>{food.fat}</b>g fat</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {searchQuery.length > 1 && !searching && searchResults.length === 0 && (
+              <div style={{ marginTop: '8px', fontSize: '13px', color: 'var(--text-secondary)', textAlign: 'center', padding: '12px' }}>
+                No results — try a different search or use manual entry
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="form-row">
           <div><label>Food / meal</label><input placeholder="e.g. Chicken & rice" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} onKeyDown={e => e.key === 'Enter' && addEntry()} /></div>
           <div><label>Calories</label><input type="number" placeholder="0" value={form.calories} onChange={e => setForm({ ...form, calories: e.target.value })} /></div>
@@ -122,6 +243,9 @@ export default function MacrosTab() {
             <i className="ti ti-plus" style={{ fontSize: '16px' }} />
           </button>
         </div>
+        <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+          {showSearch ? 'Select a food above to auto-fill, or edit the fields manually before adding.' : 'Enter macros manually or use Search food above.'}
+        </p>
       </div>
 
       {!loading && log.length > 0 && (
@@ -145,8 +269,10 @@ export default function MacrosTab() {
       )}
 
       {!loading && log.length === 0 && (
-        <div className="empty">No meals logged today — add your first one above!</div>
+        <div className="empty">No meals logged today — search for a food or add one manually above!</div>
       )}
+
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
