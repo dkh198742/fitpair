@@ -16,7 +16,6 @@ export default function WorkoutsTab() {
   const [form, setForm] = useState({ name: '', duration: '', notes: '', date: today });
   const [loading, setLoading] = useState(true);
 
-  // Exercise search
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [muscle, setMuscle] = useState('any');
@@ -26,6 +25,17 @@ export default function WorkoutsTab() {
   const [searching, setSearching] = useState(false);
   const [selectedExercise, setSelectedExercise] = useState(null);
   const searchTimeout = useRef(null);
+
+  // Keep refs in sync so searchExercises always has latest values
+  const muscleRef = useRef(muscle);
+  const equipmentRef = useRef(equipment);
+  const difficultyRef = useRef(difficulty);
+  const queryRef = useRef(searchQuery);
+
+  useEffect(() => { muscleRef.current = muscle; }, [muscle]);
+  useEffect(() => { equipmentRef.current = equipment; }, [equipment]);
+  useEffect(() => { difficultyRef.current = difficulty; }, [difficulty]);
+  useEffect(() => { queryRef.current = searchQuery; }, [searchQuery]);
 
   useEffect(() => {
     if (profile) fetchLog();
@@ -38,19 +48,21 @@ export default function WorkoutsTab() {
     setLoading(false);
   }
 
-  async function searchExercises() {
+  async function searchExercises(overrides = {}) {
     setSearching(true);
     setSelectedExercise(null);
+    const m = overrides.muscle ?? muscleRef.current;
+    const eq = overrides.equipment ?? equipmentRef.current;
+    const dif = overrides.difficulty ?? difficultyRef.current;
+    const q = overrides.query ?? queryRef.current;
+
     try {
       let url = 'https://api.api-ninjas.com/v1/exercises?limit=15';
-      if (searchQuery.trim()) url += `&name=${encodeURIComponent(searchQuery.trim())}`;
-      if (muscle !== 'any') url += `&muscle=${muscle}`;
-      if (equipment !== 'any') url += `&equipment=${equipment}`;
-      if (difficulty !== 'any') url += `&difficulty=${difficulty}`;
-      // API requires at least one filter — default to chest if nothing selected
-      if (!searchQuery.trim() && muscle === 'any' && equipment === 'any' && difficulty === 'any') {
-        url += '&muscle=chest';
-      }
+      if (q.trim()) url += `&name=${encodeURIComponent(q.trim())}`;
+      if (m !== 'any') url += `&muscle=${m}`;
+      if (eq !== 'any') url += `&equipment=${eq}`;
+      if (dif !== 'any') url += `&difficulty=${dif}`;
+      if (!q.trim() && m === 'any' && eq === 'any' && dif === 'any') url += '&muscle=chest';
 
       const res = await fetch(url, { headers: { 'X-Api-Key': NINJA_KEY } });
       const data = await res.json();
@@ -59,15 +71,23 @@ export default function WorkoutsTab() {
     setSearching(false);
   }
 
+  function handleFilterChange(field, value) {
+    if (field === 'muscle') setMuscle(value);
+    if (field === 'equipment') setEquipment(value);
+    if (field === 'difficulty') setDifficulty(value);
+    // Pass new value directly so search uses it immediately
+    searchExercises({ [field]: value });
+  }
+
   function handleSearchInput(e) {
-    setSearchQuery(e.target.value);
+    const q = e.target.value;
+    setSearchQuery(q);
     clearTimeout(searchTimeout.current);
-    searchTimeout.current = setTimeout(searchExercises, 600);
+    searchTimeout.current = setTimeout(() => searchExercises({ query: q }), 500);
   }
 
   function selectExercise(ex) {
     setForm(f => ({ ...f, name: ex.name }));
-    // Map exercise type to workout type
     const typeMap = { 'cardio': 'Cardio', 'olympic_weightlifting': 'Strength', 'powerlifting': 'Strength', 'strength': 'Strength', 'stretching': 'Yoga', 'plyometrics': 'HIIT' };
     if (typeMap[ex.type]) setType(typeMap[ex.type]);
     setSelectedExercise(ex);
@@ -101,36 +121,37 @@ export default function WorkoutsTab() {
           </button>
         </div>
 
-        {/* Exercise search */}
         {showSearch && (
           <div style={{ background: 'var(--bg-secondary)', borderRadius: '10px', padding: '12px', marginBottom: '14px' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '10px' }}>
               <div>
                 <label>Muscle group</label>
-                <select value={muscle} onChange={e => { setMuscle(e.target.value); setTimeout(searchExercises, 100); }}>
+                <select value={muscle} onChange={e => handleFilterChange('muscle', e.target.value)}>
                   {MUSCLES.map(m => <option key={m} value={m}>{m === 'any' ? 'Any muscle' : muscleLabel(m)}</option>)}
                 </select>
               </div>
               <div>
                 <label>Equipment</label>
-                <select value={equipment} onChange={e => { setEquipment(e.target.value); setTimeout(searchExercises, 100); }}>
+                <select value={equipment} onChange={e => handleFilterChange('equipment', e.target.value)}>
                   {EQUIPMENT.map(e => <option key={e} value={e}>{e === 'any' ? 'Any equipment' : muscleLabel(e)}</option>)}
                 </select>
               </div>
               <div>
                 <label>Difficulty</label>
-                <select value={difficulty} onChange={e => { setDifficulty(e.target.value); setTimeout(searchExercises, 100); }}>
+                <select value={difficulty} onChange={e => handleFilterChange('difficulty', e.target.value)}>
                   {DIFFICULTY.map(d => <option key={d} value={d}>{d === 'any' ? 'Any level' : muscleLabel(d)}</option>)}
                 </select>
               </div>
             </div>
+
             <div style={{ position: 'relative', marginBottom: '10px' }}>
               <input placeholder="Search by name… e.g. 'squat', 'bench press', 'curl'" value={searchQuery} onChange={handleSearchInput} />
-              {searching && <div style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)' }}><i className="ti ti-loader-2" style={{ animation: 'spin 1s linear infinite', display: 'inline-block', color: 'var(--text-secondary)' }} /></div>}
+              {searching && (
+                <div style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)' }}>
+                  <i className="ti ti-loader-2" style={{ animation: 'spin 1s linear infinite', display: 'inline-block', color: 'var(--text-secondary)' }} />
+                </div>
+              )}
             </div>
-            <button className="btn btn-primary btn-sm" onClick={searchExercises} style={{ marginBottom: '10px' }}>
-              <i className="ti ti-search" style={{ fontSize: '12px', marginRight: '4px' }} />Search
-            </button>
 
             {exercises.length > 0 && (
               <div style={{ maxHeight: '320px', overflowY: 'auto', border: '0.5px solid var(--border)', borderRadius: '8px' }}>
@@ -152,6 +173,7 @@ export default function WorkoutsTab() {
                 ))}
               </div>
             )}
+
             {!searching && exercises.length === 0 && (
               <div style={{ fontSize: '13px', color: 'var(--text-secondary)', textAlign: 'center', padding: '12px' }}>
                 No exercises found — try different filters
@@ -160,7 +182,6 @@ export default function WorkoutsTab() {
           </div>
         )}
 
-        {/* Show selected exercise instructions */}
         {selectedExercise && (
           <div style={{ background: '#E1F5EE', borderRadius: '10px', padding: '12px', marginBottom: '12px' }}>
             <div style={{ fontSize: '13px', fontWeight: '500', color: '#085041', marginBottom: '4px', textTransform: 'capitalize' }}>
