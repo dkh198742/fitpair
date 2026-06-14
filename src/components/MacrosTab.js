@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/AuthContext';
 
+const USDA_KEY = process.env.REACT_APP_USDA_API_KEY;
+
 export default function MacrosTab() {
   const { profile, updateGoals } = useAuth();
   const [log, setLog] = useState([]);
@@ -10,11 +12,11 @@ export default function MacrosTab() {
   const [goals, setGoals] = useState(profile?.macro_goals || { calories: 1800, protein: 140, carbs: 180, fat: 60 });
   const [loading, setLoading] = useState(true);
 
-  // Food search state
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [searchSource, setSearchSource] = useState('all');
   const searchTimeout = useRef(null);
 
   const today = new Date().toISOString().slice(0, 10);
@@ -38,19 +40,16 @@ export default function MacrosTab() {
     setLoading(false);
   }
 
-  async function searchFood(query) {
-    if (!query || query.length < 2) { setSearchResults([]); return; }
-    setSearching(true);
+  async function searchOpenFoodFacts(query) {
     try {
       const res = await fetch(
-        `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=8&fields=product_name,brands,nutriments,serving_size,serving_quantity`
+        `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=6&fields=product_name,brands,nutriments,serving_size,serving_quantity`
       );
       const data = await res.json();
-      const results = (data.products || [])
+      return (data.products || [])
         .filter(p => p.product_name && p.nutriments)
         .map(p => {
           const n = p.nutriments;
-          // Prefer per-serving values, fall back to per-100g
           const serving = p.serving_quantity || 100;
           const factor = serving / 100;
           return {
@@ -60,13 +59,64 @@ export default function MacrosTab() {
             protein: Math.round((n['proteins_serving'] || n['proteins_100g'] * factor) || 0),
             carbs: Math.round((n['carbohydrates_serving'] || n['carbohydrates_100g'] * factor) || 0),
             fat: Math.round((n['fat_serving'] || n['fat_100g'] * factor) || 0),
+            source: 'Open Food Facts',
           };
         })
         .filter(p => p.calories > 0);
+    } catch { return []; }
+  }
+
+  async function searchUSDA(query) {
+    if (!USDA_KEY) return [];
+    try {
+      const res = await fetch(
+        `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(query)}&dataType=Branded,SR%20Legacy&pageSize=6&api_key=${USDA_KEY}`
+      );
+      const data = await res.json();
+      return (data.foods || []).map(food => {
+        const get = (name) => {
+          const n = food.foodNutrients?.find(n => n.nutrientName === name);
+          return n ? Math.round(n.value || 0) : 0;
+        };
+        const calories = get('Energy');
+        const protein = get('Protein');
+        const carbs = get('Carbohydrate, by difference');
+        const fat = get('Total lipid (fat)');
+        const serving = food.servingSize ? `${food.servingSize}${food.servingSizeUnit || 'g'}` : '100g';
+        return {
+          name: food.description + (food.brandOwner ? ` (${food.brandOwner})` : ''),
+          serving,
+          calories,
+          protein,
+          carbs,
+          fat,
+          source: 'USDA',
+        };
+      }).filter(p => p.calories > 0);
+    } catch { return []; }
+  }
+
+  async function searchFood(query) {
+    if (!query || query.length < 2) { setSearchResults([]); return; }
+    setSearching(true);
+    try {
+      let results = [];
+      if (searchSource === 'all') {
+        const [off, usda] = await Promise.all([searchOpenFoodFacts(query), searchUSDA(query)]);
+        // Interleave results from both sources
+        const maxLen = Math.max(off.length, usda.length);
+        for (let i = 0; i < maxLen; i++) {
+          if (usda[i]) results.push(usda[i]);
+          if (off[i]) results.push(off[i]);
+        }
+        results = results.slice(0, 12);
+      } else if (searchSource === 'usda') {
+        results = await searchUSDA(query);
+      } else {
+        results = await searchOpenFoodFacts(query);
+      }
       setSearchResults(results);
-    } catch {
-      setSearchResults([]);
-    }
+    } catch { setSearchResults([]); }
     setSearching(false);
   }
 
@@ -78,13 +128,7 @@ export default function MacrosTab() {
   }
 
   function selectFood(food) {
-    setForm({
-      name: food.name,
-      calories: food.calories,
-      protein: food.protein,
-      carbs: food.carbs,
-      fat: food.fat,
-    });
+    setForm({ name: food.name, calories: food.calories, protein: food.protein, carbs: food.carbs, fat: food.fat });
     setShowSearch(false);
     setSearchQuery('');
     setSearchResults([]);
@@ -93,13 +137,9 @@ export default function MacrosTab() {
   async function addEntry() {
     if (!form.name || !form.calories) return;
     const entry = {
-      user_id: profile.id,
-      date: today,
-      name: form.name,
-      calories: parseInt(form.calories) || 0,
-      protein: parseInt(form.protein) || 0,
-      carbs: parseInt(form.carbs) || 0,
-      fat: parseInt(form.fat) || 0,
+      user_id: profile.id, date: today, name: form.name,
+      calories: parseInt(form.calories) || 0, protein: parseInt(form.protein) || 0,
+      carbs: parseInt(form.carbs) || 0, fat: parseInt(form.fat) || 0,
     };
     const { data } = await supabase.from('macro_log').insert(entry).select().single();
     if (data) setLog(l => [...l, data]);
@@ -117,18 +157,17 @@ export default function MacrosTab() {
   }
 
   const totals = log.reduce((a, e) => ({
-    calories: a.calories + (e.calories || 0),
-    protein: a.protein + (e.protein || 0),
-    carbs: a.carbs + (e.carbs || 0),
-    fat: a.fat + (e.fat || 0),
+    calories: a.calories + (e.calories || 0), protein: a.protein + (e.protein || 0),
+    carbs: a.carbs + (e.carbs || 0), fat: a.fat + (e.fat || 0),
   }), { calories: 0, protein: 0, carbs: 0, fat: 0 });
 
   const g = goals;
   const pct = (v, max) => Math.min(100, Math.round((v / (max || 1)) * 100));
 
+  const sourceColors = { 'USDA': '#185FA5', 'Open Food Facts': '#3B6D11' };
+
   return (
     <div>
-      {/* Macro summary */}
       <div className="card">
         <div className="section-hdr">
           <span className="card-title" style={{ margin: 0 }}>Today's macros</span>
@@ -170,25 +209,33 @@ export default function MacrosTab() {
         </div>
       </div>
 
-      {/* Food search */}
       <div className="card">
         <div className="section-hdr">
           <span className="card-title" style={{ margin: 0 }}>Log food</span>
           <button className="btn btn-sm" onClick={() => { setShowSearch(!showSearch); setSearchQuery(''); setSearchResults([]); }}>
             <i className="ti ti-search" style={{ fontSize: '13px', marginRight: '4px' }} />
-            {showSearch ? 'Manual entry' : 'Search food'}
+            {showSearch ? 'Hide search' : 'Search food'}
           </button>
         </div>
 
         {showSearch && (
           <div style={{ marginBottom: '14px' }}>
+            {/* Source filter */}
+            <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
+              {[['all', 'All sources'], ['usda', 'USDA (restaurants)'], ['off', 'Open Food Facts']].map(([val, label]) => (
+                <button key={val} className={`type-chip${searchSource === val ? ' active' : ''}`}
+                  onClick={() => { setSearchSource(val); if (searchQuery.length > 1) searchFood(searchQuery); }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+
             <div style={{ position: 'relative' }}>
               <input
-                placeholder="Search millions of foods… e.g. 'Greek yogurt', 'Big Mac'"
+                placeholder={searchSource === 'usda' ? "Search restaurants & branded foods… e.g. 'Big Mac', 'Chipotle burrito'" : "Search foods… e.g. 'Greek yogurt', 'chicken breast'"}
                 value={searchQuery}
                 onChange={handleSearchInput}
                 autoFocus
-                style={{ paddingRight: '36px' }}
               />
               {searching && (
                 <div style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '12px', color: 'var(--text-secondary)' }}>
@@ -198,25 +245,21 @@ export default function MacrosTab() {
             </div>
 
             {searchResults.length > 0 && (
-              <div style={{ marginTop: '8px', border: '0.5px solid var(--border)', borderRadius: '10px', overflow: 'hidden' }}>
+              <div style={{ marginTop: '8px', border: '0.5px solid var(--border)', borderRadius: '10px', overflow: 'hidden', maxHeight: '320px', overflowY: 'auto' }}>
                 {searchResults.map((food, i) => (
-                  <div
-                    key={i}
-                    onClick={() => selectFood(food)}
-                    style={{
-                      padding: '10px 12px', cursor: 'pointer',
-                      borderBottom: i < searchResults.length - 1 ? '0.5px solid var(--border)' : 'none',
-                      background: 'var(--bg-primary)',
-                      transition: 'background .1s',
-                    }}
+                  <div key={i} onClick={() => selectFood(food)}
+                    style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: i < searchResults.length - 1 ? '0.5px solid var(--border)' : 'none', background: 'var(--bg-primary)', transition: 'background .1s' }}
                     onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-secondary)'}
                     onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-primary)'}
                   >
-                    <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '3px' }}>{food.name}</div>
-                    <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: '500', flex: 1 }}>{food.name}</span>
+                      <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '8px', background: sourceColors[food.source] + '20', color: sourceColors[food.source], flexShrink: 0 }}>{food.source}</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
                       <span>per {food.serving}</span>
                       <span style={{ color: '#1D9E75' }}><b>{food.calories}</b> cal</span>
-                      <span><b>{food.protein}</b>g protein</span>
+                      <span><b>{food.protein}</b>g pro</span>
                       <span><b>{food.carbs}</b>g carbs</span>
                       <span><b>{food.fat}</b>g fat</span>
                     </div>
@@ -227,7 +270,7 @@ export default function MacrosTab() {
 
             {searchQuery.length > 1 && !searching && searchResults.length === 0 && (
               <div style={{ marginTop: '8px', fontSize: '13px', color: 'var(--text-secondary)', textAlign: 'center', padding: '12px' }}>
-                No results — try a different search or use manual entry
+                No results — try a different search or enter manually below
               </div>
             )}
           </div>
@@ -244,7 +287,7 @@ export default function MacrosTab() {
           </button>
         </div>
         <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-          {showSearch ? 'Select a food above to auto-fill, or edit the fields manually before adding.' : 'Enter macros manually or use Search food above.'}
+          Search food to auto-fill macros, or enter them manually above.
         </p>
       </div>
 
@@ -269,7 +312,7 @@ export default function MacrosTab() {
       )}
 
       {!loading && log.length === 0 && (
-        <div className="empty">No meals logged today — search for a food or add one manually above!</div>
+        <div className="empty">No meals logged today — search for a food or add one manually!</div>
       )}
 
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
