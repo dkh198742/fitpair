@@ -133,7 +133,7 @@ export default function WorkoutsTab() {
             </button>
 
             {exercises.length > 0 && (
-              <div style={{ maxHeight: '320px', overflowY: 'auto', border: '0.5px solid var(--border)', borderRadius: '8px', overflow: 'hidden' }}>
+              <div style={{ maxHeight: '320px', overflowY: 'auto', border: '0.5px solid var(--border)', borderRadius: '8px' }}>
                 {exercises.map((ex, i) => (
                   <div key={i} onClick={() => selectExercise(ex)}
                     style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: i < exercises.length - 1 ? '0.5px solid var(--border)' : 'none', background: 'var(--bg-primary)', transition: 'background .1s' }}
