@@ -45,8 +45,12 @@ export default function WorkoutsTab() {
       let url = 'https://api.api-ninjas.com/v1/exercises?limit=15';
       if (searchQuery.trim()) url += `&name=${encodeURIComponent(searchQuery.trim())}`;
       if (muscle !== 'any') url += `&muscle=${muscle}`;
-      if (equipment !== 'any') url += `&type=${equipment}`;
+      if (equipment !== 'any') url += `&equipment=${equipment}`;
       if (difficulty !== 'any') url += `&difficulty=${difficulty}`;
+      // API requires at least one filter — default to chest if nothing selected
+      if (!searchQuery.trim() && muscle === 'any' && equipment === 'any' && difficulty === 'any') {
+        url += '&muscle=chest';
+      }
 
       const res = await fetch(url, { headers: { 'X-Api-Key': NINJA_KEY } });
       const data = await res.json();
