@@ -6,11 +6,13 @@ import WorkoutsTab from './components/WorkoutsTab';
 import ProgressTab from './components/ProgressTab';
 import TogetherTab from './components/TogetherTab';
 import AITab from './components/AITab';
+import WeeklyTab from './components/WeeklyTab';
 import './App.css';
 
 const TABS = [
   { id: 'macros', icon: 'ti-salad', label: 'Macros' },
   { id: 'workouts', icon: 'ti-barbell', label: 'Workouts' },
+  { id: 'weekly', icon: 'ti-calendar-stats', label: 'Weekly' },
   { id: 'progress', icon: 'ti-trending-up', label: 'Progress' },
   { id: 'together', icon: 'ti-users', label: 'Together' },
   { id: 'ai', icon: 'ti-robot', label: 'AI Coach' },
@@ -35,9 +37,7 @@ export default function App() {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '28px', fontWeight: '600', marginBottom: '8px' }}>
-            <span style={{ color: '#1D9E75' }}>Fit</span>Pair
-          </div>
+          <div style={{ fontSize: '28px', fontWeight: '600', marginBottom: '8px' }}><span style={{ color: '#1D9E75' }}>Fit</span>Pair</div>
           <div style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>Loading…</div>
         </div>
       </div>
@@ -51,12 +51,7 @@ export default function App() {
       <div className="header">
         <div className="logo"><span>Fit</span>Pair</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <button
-            className="btn btn-sm"
-            onClick={() => setDarkMode(d => !d)}
-            title="Toggle dark mode"
-            style={{ padding: '6px 8px' }}
-          >
+          <button className="btn btn-sm" onClick={() => setDarkMode(d => !d)} title="Toggle dark mode" style={{ padding: '6px 8px' }}>
             <i className={`ti ${darkMode ? 'ti-sun' : 'ti-moon'}`} style={{ fontSize: '15px' }} />
           </button>
           <div style={{ position: 'relative' }}>
@@ -92,6 +87,7 @@ export default function App() {
 
       {tab === 'macros' && <MacrosTab />}
       {tab === 'workouts' && <WorkoutsTab />}
+      {tab === 'weekly' && <WeeklyTab />}
       {tab === 'progress' && <ProgressTab />}
       {tab === 'together' && <TogetherTab />}
       {tab === 'ai' && <AITab />}
